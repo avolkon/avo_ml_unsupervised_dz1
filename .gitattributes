@@ -1,0 +1,4 @@
+# Стабильные переводы строк — меньше «ложных» diff в GitHub Desktop (Windows)
+*.ipynb text eol=lf
+*.py text eol=lf
+*.md text eol=lf

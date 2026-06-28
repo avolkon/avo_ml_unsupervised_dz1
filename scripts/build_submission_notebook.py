@@ -13,14 +13,13 @@ SRC = ROOT / "notebooks" / "avo_m25_555_ml_unsupervised_v1.ipynb"
 PLAN_NB = SRC
 OUT = SRC
 
-AUTONOMY_MD = """## Перед запуском (автономный режим)
+AUTONOMY_MD = """## Перед запуском
 
-Ноутбук **не требует репозитория**. Нужен только файл данных:
+Данные загружаются в **§2**:
+1. автоматически через `gdown` с [Google Drive](https://drive.google.com/file/d/1dxfUHO8Fc0pAkUpQbcZX6FtK7ufLVIJS/view?usp=drive_link);
+2. если не сработало — ручная загрузка через виджет Colab (в той же ячейке).
 
-1. Скачайте `Physical_Activity_Monitoring_unlabeled.csv` с [Kaggle](https://www.kaggle.com/competitions/clustering-physical-activity/data).
-2. Положите CSV **в ту же папку**, что и этот `.ipynb`, **или** загрузите через виджет в ячейке ниже (Colab / Jupyter).
-
-**Зависимости:** `pandas`, `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `seaborn`, `missingno` — установка в следующей ячейке при необходимости.
+**Зависимости:** `pandas`, `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `seaborn`, `missingno`, `gdown` — установка в следующих ячейках при необходимости.
 
 **Воспроизводимость:** `random_state=42` во всех моделях. Финальный submission: **§8 — row-level PCA 95% + KMeans k=6** (Public LB **0.22835**).
 
@@ -80,65 +79,50 @@ sns.set_palette("husl")
 plt.rcParams["figure.figsize"] = (12, 6)
 '''
 
-LOAD_CODE = '''# §2. Загрузка данных (автономно)
+LOAD_CODE = '''# §2. Загрузка данных
+# Drive: https://drive.google.com/file/d/1dxfUHO8Fc0pAkUpQbcZX6FtK7ufLVIJS/view?usp=drive_link
+!pip install gdown -q
+
+import gdown
 from pathlib import Path
 
+FILE_ID = "1dxfUHO8Fc0pAkUpQbcZX6FtK7ufLVIJS"
 DATA_FILENAME = "Physical_Activity_Monitoring_unlabeled.csv"
-NOTEBOOK_DIR = Path.cwd()
+data_path = Path(DATA_FILENAME)
 
+if not data_path.is_file():
+    try:
+        gdown.download(
+            f"https://drive.google.com/uc?id={FILE_ID}&confirm=t",
+            DATA_FILENAME,
+            quiet=False,
+        )
+    except Exception as e:
+        print(f"gdown не сработал: {e}")
 
-def resolve_data_path() -> Path:
-    candidates = [
-        NOTEBOOK_DIR / DATA_FILENAME,
-        NOTEBOOK_DIR / "data" / "raw" / DATA_FILENAME,
-    ]
-    for p in candidates:
-        if p.is_file():
-            return p.resolve()
-    # Colab / Jupyter: загрузка файла вручную
+if not data_path.is_file():
     try:
         from google.colab import files  # type: ignore
 
         print("Файл не найден. Выберите CSV для загрузки...")
         uploaded = files.upload()
         name = next(iter(uploaded))
-        path = NOTEBOOK_DIR / name
-        path.write_bytes(uploaded[name])
-        return path.resolve()
+        Path(name).write_bytes(uploaded[name])
+        data_path = Path(name)
     except ImportError:
-        pass
-    try:
-        from ipywidgets import FileUpload
-        from IPython.display import display
-        import io
+        raise FileNotFoundError(
+            f"Не удалось получить {DATA_FILENAME}. "
+            f"Скачайте вручную: https://drive.google.com/file/d/{FILE_ID}/view?usp=drive_link"
+        )
 
-        upload = FileUpload(accept=".csv", multiple=False)
-        display(upload)
-
-        def _wait():
-            while not upload.value:
-                pass
-            raw = upload.value[0]
-            path = NOTEBOOK_DIR / raw["name"]
-            path.write_bytes(raw["content"])
-            return path.resolve()
-
-        print("Ожидание загрузки через FileUpload...")
-        return _wait()
-    except ImportError:
-        pass
-    raise FileNotFoundError(
-        f"Положите {DATA_FILENAME} в {NOTEBOOK_DIR} или используйте Colab upload"
-    )
-
-
-DATA_PATH = resolve_data_path()
-df = pd.read_csv(DATA_PATH)
-print(f"Загружено: {df.shape} из {DATA_PATH}")
+df = pd.read_csv(data_path)
+print("Загружено:", df.shape, "из", data_path.resolve())
 df.head()
 '''
 
 UTILS_CODE = '''# Вспомогательные функции (submission, отбор признаков, метрики)
+
+NOTEBOOK_DIR = Path.cwd()
 
 
 def remap_cluster_ids(labels):
@@ -326,9 +310,7 @@ def clear_cell(cell: dict) -> dict:
 
 
 def should_drop(source: str) -> bool:
-    """Удаляем только Colab/gdown-загрузку, не автономный resolve_data_path."""
-    if "!pip install gdown" in source or "gdown.download" in source:
-        return True
+    """Удаляем только лишний Colab boilerplate (не §2 gdown)."""
     if "from google.colab import drive" in source:
         return True
     if "#@title Загрузка большого файла" in source:

@@ -60,3 +60,5 @@ kaggle.json
 # Временные файлы
 tempCodeRunnerFile.py
 *.tmp
+_list_cells.py
+scripts/_patch_*.py
